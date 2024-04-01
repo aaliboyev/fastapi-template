@@ -1,0 +1,3 @@
+commands:
+  - name: dev
+    command: uvicorn src.main:app --reload

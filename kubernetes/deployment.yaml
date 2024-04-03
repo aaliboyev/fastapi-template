@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-template
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fastapi-template
+  template:
+    metadata:
+      labels:
+        app: fastapi-template
+    spec:
+      containers:
+        - name: fastapi-template
+          image: aaliboyev/fastapi-template:0.0.1
+          ports:
+            - containerPort: 80

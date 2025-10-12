@@ -1,0 +1,15 @@
+.vscode
+/test-results/
+/blob-report/
+.idea
+/data
+.env
+__pycache__
+app.egg-info
+*.pyc
+.mypy_cache
+.coverage
+htmlcov
+.cache
+.venv
+certs

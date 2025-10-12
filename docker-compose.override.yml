@@ -1,0 +1,35 @@
+services:
+
+  db:
+    restart: "no"
+    ports:
+      - "5432:5432"
+
+  redis:
+    restart: "no"
+    ports:
+      - "6379:6379"
+
+  backend:
+    restart: "no"
+    command: ['scripts/entrypoint.sh']
+    volumes:
+      - ./src:/app/src
+      - ./certs:/app/certs
+      - ./data/userdata:/data/userdata
+    # command: sleep infinity  # Infinite loop to keep container alive doing nothing
+    develop:
+      watch:
+        - path: ./src
+          action: sync
+          target: /app/src
+          ignore:
+            - ./src/.venv
+            - .venv
+        - path: ./pyproject.toml
+          action: rebuild
+
+  prestart:
+    volumes:
+      - ./alembic:/app/alembic
+      - ./scripts:/app/scripts

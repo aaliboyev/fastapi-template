@@ -1,0 +1,79 @@
+name: fastapi-template-stack
+services:
+  db:
+    image: postgres:17.5-bookworm
+    container_name: api_db
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    ports:
+      - "5432:5432"
+    volumes:
+      - app-db-data:/var/lib/postgresql/data/pgdata
+    env_file:
+      - .env
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+
+  redis:
+    image: redis:7-alpine
+    container_name: api_redis
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 3s
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - app-redis-data:/data
+    env_file:
+      - .env
+
+  backend:
+    image: '${DOCKER_IMAGE}:${TAG-latest}'
+    container_name: api
+    restart: always
+    command: ['scripts/entrypoint.sh']
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      redis:
+        condition: service_healthy
+        restart: true
+      prestart:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    volumes:
+      - ./certs:/app/certs
+      - ./data/userdata:/data/userdata
+    healthcheck:
+      test: ["CMD", "curl", "-f", "${SERVER_PROTOCOL}://${SERVER_HOST}:${SERVER_PORT}/api/health-check/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_SERVER=db
+      - REDIS_HOST=redis
+
+  prestart:
+    image: '${DOCKER_IMAGE}:${TAG}-migrate'
+    container_name: api_prestart
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_SERVER=db
+
+volumes:
+  app-db-data:
+  app-redis-data:

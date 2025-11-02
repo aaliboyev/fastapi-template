@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from pydantic import EmailStr
 from sqlmodel import select
 
@@ -300,20 +302,14 @@ class UserService(BaseAsyncServiceWithDB):
         Returns:
             User instance if session found and valid, None otherwise
         """
-        from src.models.user.session import UserSession
 
-        statement = (
-            select(User)
-            .join(UserSession, UserSession.user_id == User.id)
-            .where(UserSession.token == token)
+        statement = select(UserSession).where(
+            UserSession.token == token, UserSession.expiration >= datetime.now(UTC)
         )
 
-        # Check if model supports soft delete
-        if cls._supports_soft_delete():
-            statement = statement.where(User.deleted_at.is_(None))  # type: ignore[union-attr]
-
         result = await session.exec(statement)
-        return result.unique().one_or_none()
+        session_data = result.unique().one_or_none()
+        return session_data.user if session_data else None
 
     @classmethod
     async def get_account_by_user_id(

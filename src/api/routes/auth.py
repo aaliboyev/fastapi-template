@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 
 from src.api.deps.auth import SessionUser
 from src.api.deps.db import AsyncDBSession
 from src.api.middlewares import SessionIntegration
+from src.config import settings
 from src.models.user import User
 from src.models.user.session import UserSession
 from src.schema.user import UserLogin, UserPublic, UserRegister
@@ -33,7 +34,10 @@ async def register(user_in: UserRegister, db_session: AsyncDBSession) -> User:
 
 @router.post("/login", response_model=UserPublic)
 async def login(
-    request: Request, credentials: UserLogin, db_session: AsyncDBSession
+    request: Request,
+    response: Response,
+    credentials: UserLogin,
+    db_session: AsyncDBSession,
 ) -> User:
     """
     Login user with email and password.
@@ -48,13 +52,15 @@ async def login(
     )
 
     if not user:
+        response.set_cookie("auth", "false")
         raise HTTPException(401, detail={"message": "Invalid email or password"})
 
     # Create user session in database
     user_session = UserSession(
         user_id=user.id,
         token=session.id,
-        expiration=datetime.now(UTC) + timedelta(days=30),
+        expiration=datetime.now(UTC)
+        + timedelta(seconds=settings.SESSION_COOKIE_MAX_AGE),
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
@@ -63,7 +69,7 @@ async def login(
 
     # Cache user in Redis session
     session["user"] = jsonable_encoder(user.model_dump())
-
+    response.set_cookie("auth", "true")
     return user
 
 
@@ -78,7 +84,9 @@ async def get_current_user(user: SessionUser) -> User:
 
 
 @router.post("/logout")
-async def logout(_: SessionUser, request: Request, db_session: AsyncDBSession) -> dict:
+async def logout(
+    _: SessionUser, response: Response, request: Request, db_session: AsyncDBSession
+) -> dict:
     """
     Logout current user.
 
@@ -87,4 +95,5 @@ async def logout(_: SessionUser, request: Request, db_session: AsyncDBSession) -
     session: SessionIntegration = request.state.session
     await UserService.logout(session.id, db_session)
     await session.clear()
+    response.set_cookie("auth", "false")
     return {"message": "Logged out successfully"}

@@ -7,8 +7,6 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from src.config import settings
-
 
 class SessionIntegration:
     def __init__(self, memory, session_id):
@@ -38,9 +36,7 @@ class SessionIntegration:
 
     async def save(self):
         """Save the session store."""
-        await self.memory.save_store(
-            self.id, self.store, ttl=15 * 60
-        )
+        await self.memory.save_store(self.id, self.store, ttl=15 * 60)
 
 
 class SessionMiddleware(BaseHTTPMiddleware):
@@ -207,27 +203,20 @@ class SessionMiddleware(BaseHTTPMiddleware):
             if decoded_dict is not None:
                 self.logger.debug("Cookie signature validation success")
                 session_id = decoded_dict.get(self.session_cookie_name)
-                has_session = await self.memory.has(session_id)
+                session = SessionIntegration(memory=self.memory, session_id=session_id)
 
-                if not has_session:
+                if not await self.memory.has(session_id):
                     self.logger.info(
                         f"[session_id:'{session_id}'] Session cookie available. But no store for this sessionId found. Maybe store had cleaned."
                     )
-                    session = self.create_session(
-                        request, cause="valid_cookie_but_no_store"
-                    )
-                    cookie = self.create_session_cookie(session.id)
+                    session["__cause__"] = "cache_miss"
                 else:
                     self.logger.info(
                         f"[session_id:'{session_id}'] Session cookie and Store is available! set session_mgr to request.state.{self.session_object}"
                     )
-
-                    session = SessionIntegration(
-                        memory=self.memory, session_id=session_id
-                    )
                     await session.load()
-                    session["__cause__"] = "success"
-                    setattr(request.state, self.session_object, session)
+                    session["__cause__"] = "cache_hit"
+                setattr(request.state, self.session_object, session)
             else:
                 self.logger.info(
                     f"Session cookies available but verification failed! err:{err}"

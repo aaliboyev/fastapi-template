@@ -1,7 +1,7 @@
 from typing import Annotated, TypeAlias
 
 from authx.exceptions import MissingTokenError
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 
 from src.api.deps.db import AsyncDBSession
@@ -20,20 +20,9 @@ async def check_token(request: Request):
         raise HTTPException(401, detail={"message": "Missing access token"})
 
 
-async def get_session_user(request: Request, db_session: AsyncDBSession) -> User:
-    """
-    Get user from session, checking Redis cache first, then DB.
-
-    Args:
-        request: FastAPI request object
-        db_session: Async database session
-
-    Returns:
-        User instance if authenticated
-
-    Raises:
-        HTTPException: 401 if user not authenticated
-    """
+async def get_session_user(
+    request: Request, response: Response, db_session: AsyncDBSession
+) -> User:
     session: SessionIntegration = request.state.session
 
     # Try to get user from Redis session cache
@@ -46,9 +35,15 @@ async def get_session_user(request: Request, db_session: AsyncDBSession) -> User
     if user:
         # Cache user in session for future requests
         session["user"] = jsonable_encoder(user.model_dump())
+        response.set_cookie("auth", "true")
         return user
 
-    raise HTTPException(401, detail={"message": "Not authenticated"})
+    response.set_cookie("auth", "false")
+    raise HTTPException(
+        401,
+        detail={"message": "Not authenticated"},
+        headers={"Set-Cookie": "auth=false; Path=/"},
+    )
 
 
 SessionUser: TypeAlias = Annotated[User, Depends(get_session_user)]
